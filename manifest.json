@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "Livra",
+  "version": "2.3.0",
+  "description": "DY智能直播助手",
+  "permissions": [
+    "debugger",
+    "tabs",
+    "sidePanel",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*.douyin.com/*",
+    "*://127.0.0.1/*",
+    "*://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Livra · 智能直播助手"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.douyin.com/*",
+        "*://127.0.0.1/*",
+        "*://localhost/*"
+      ],
+      "js": [
+        "injected.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "*://*.douyin.com/*",
+        "*://127.0.0.1/*",
+        "*://localhost/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

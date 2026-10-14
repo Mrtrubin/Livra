@@ -1,0 +1,490 @@
+/* Livra 侧边栏 —— 智能直播助手 */
+
+/* 这条必须在最前面：显式的 display 规则会压过 hidden 属性，否则 setMessage 类逻辑会静默失效 */
+[hidden] {
+  display: none !important;
+}
+
+:root {
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --faint: #9ca3af;
+  --accent: #15803d;
+  --accent-soft: #dcfce7;
+  --danger: #b91c1c;
+  --danger-soft: #fee2e2;
+  --code-bg: #f3f4f6;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  min-height: 100vh;
+}
+
+/* ============================ 头部 ============================ */
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.logo {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .5px;
+}
+
+.brand-text {
+  min-width: 0;
+}
+
+.brand-text h1 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brand-sub {
+  margin: 0;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.badge {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badge.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.badge.err {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* ============================ 卡片 ============================ */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 11px 12px;
+}
+
+.card-label {
+  font-size: 11px;
+  color: var(--faint);
+  margin-bottom: 4px;
+}
+
+.target-title {
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target-url {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--faint);
+  word-break: break-all;
+  max-height: 44px;
+  overflow: hidden;
+}
+
+/* ============================ 开关 ============================ */
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.switch-text {
+  min-width: 0;
+}
+
+.switch-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.switch-hint {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.switch {
+  flex: none;
+  position: relative;
+  width: 42px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #d1d5db;
+  cursor: pointer;
+  transition: background .18s ease;
+}
+
+.switch:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.switch.on {
+  background: var(--accent);
+}
+
+.knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  transition: transform .18s ease;
+}
+
+.switch.on .knob {
+  transform: translateX(18px);
+}
+
+.notice {
+  margin-top: 9px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* ============================ 统计 ============================ */
+
+.stats {
+  display: flex;
+  gap: 10px;
+}
+
+.stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.stat strong {
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================ 规则 ============================ */
+
+.rules-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rules-head h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tag {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--code-bg);
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.rule {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 9px;
+  background: #fafafa;
+}
+
+.rule.off {
+  opacity: .5;
+}
+
+.rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.rule-name {
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rule-scope {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--code-bg);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.rule-line {
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: var(--code-bg);
+  color: #374151;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  line-height: 1.5;
+  word-break: break-all;
+  max-height: 62px;
+  overflow: auto;
+}
+
+.rule-line.repl {
+  background: var(--accent-soft);
+  color: #14532d;
+}
+
+.rule-arrow {
+  margin: 3px 0 3px 7px;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.rule-empty {
+  padding: 10px;
+  text-align: center;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+/* ============================ 直播数据 ============================ */
+
+.live-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.live-head h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.live-socket {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.live-socket.on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.danmaku-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.danmaku {
+  font-size: 12px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.danmaku-user {
+  color: #2563eb;
+  margin-right: 6px;
+}
+
+.danmaku-text {
+  color: var(--text);
+}
+
+.danmaku.enter .danmaku-user,
+.danmaku.enter .danmaku-text {
+  color: var(--faint);
+}
+
+.danmaku.gift .danmaku-text {
+  color: #b45309;
+}
+
+.danmaku-empty {
+  padding: 12px 4px;
+  color: var(--faint);
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.send-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.send-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+}
+
+.send-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.send-row .primary {
+  flex: none;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.send-row .primary:disabled {
+  opacity: .55;
+  cursor: default;
+}
+
+.live-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+/* 发送结果单独一行，不能被上面的 live-hint（消息计数）刷掉 */
+.send-status {
+  margin-top: 6px;
+  font-size: 11px;
+  min-height: 16px;
+  line-height: 1.4;
+}
+
+.send-status.pending {
+  color: var(--muted);
+}
+
+.send-status.ok {
+  color: var(--accent);
+}
+
+.send-status.err {
+  color: var(--danger);
+}
+
+/* ============================ 页脚 ============================ */
+
+.foot {
+  margin-top: auto;
+  padding-top: 4px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--faint);
+}
