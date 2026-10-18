@@ -4,9 +4,13 @@
  *
  * Chrome 155 起 --load-extension 已失效，必须走 CDP 的 Extensions.loadUnpacked
  * （浏览器需以 --enable-unsafe-extension-debugging 启动）。
+ *
+ * 日常调试直接用 test/open-browser.js，它一条命令就把浏览器和扩展都开好了。
  */
+const path = require("path");
+
 const CDP_PORT = Number(process.env.CDP_PORT || 9351);
-const EXT = process.env.EXT || "/Users/dingchangbiao.1/code/browser-plugins/Livra";
+const EXT = process.env.EXT || path.resolve(__dirname, "..");
 
 async function main() {
   const version = await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/version`)).json();

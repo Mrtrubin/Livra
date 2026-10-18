@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Livra",
-  "version": "2.4.0",
+  "version": "3.0.0",
   "description": "DY智能直播助手",
   "permissions": [
-    "debugger",
     "tabs",
+    "scripting",
     "sidePanel",
-    "scripting"
+    "storage"
   ],
   "host_permissions": [
     "*://*.douyin.com/*",
@@ -15,13 +15,13 @@
     "*://localhost/*"
   ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "src/background.js"
   },
   "action": {
     "default_title": "Livra · 智能直播助手"
   },
   "side_panel": {
-    "default_path": "modules/assistant/assistant.html"
+    "default_path": "src/panel/panel.html"
   },
   "content_scripts": [
     {
@@ -31,11 +31,15 @@
         "*://localhost/*"
       ],
       "js": [
-        "modules/inject/runtime.js",
-        "modules/inject/protobuf.js",
-        "modules/inject/transport.js",
-        "modules/inject/sender.js",
-        "modules/inject/main.js"
+        "src/sdk/namespace.js",
+        "src/sdk/types.js",
+        "src/sdk/bus.js",
+        "src/sdk/protocol/wire.js",
+        "src/sdk/protocol/decoder.js",
+        "src/sdk/room.js",
+        "src/sdk/transport.js",
+        "src/sdk/sender.js",
+        "src/sdk/index.js"
       ],
       "run_at": "document_start",
       "world": "MAIN",
@@ -48,7 +52,9 @@
         "*://localhost/*"
       ],
       "js": [
-        "modules/inject/bridge.js"
+        "src/sdk/namespace.js",
+        "src/sdk/protocol/wire.js",
+        "src/bridge.js"
       ],
       "run_at": "document_idle",
       "all_frames": false

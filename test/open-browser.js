@@ -144,7 +144,7 @@ async function main() {
   console.log(`接下来可以用调试桥操作（同一个端口 ${CDP_PORT}）：`);
   console.log(`  node test/bridge.js status`);
   console.log(`  node test/bridge.js panel`);
-  console.log(`改了代码要重载：node test/bridge.js reload both`);
+  console.log(`改了代码要重载：关掉窗口重跑本脚本（content script 只能靠刷新页面才生效）。`);
   console.log(`\n这个脚本会一直挂着维持浏览器存活，Ctrl+C 或关掉窗口即退出。`);
 
   // 之所以要挂住不退出：浏览器是本进程（或其子进程）拉起来的，脚本一退出它就

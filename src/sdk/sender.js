@@ -1,8 +1,8 @@
 /**
- * 注入模块 · 发弹幕（MAIN world）
+ * SDK · 发弹幕
  *
  * ┌──────────────────────────────────────────────────────────────────────────┐
- * │ 核心方案（2026-10-16 实测跑通）：替换「输入框控制器」的 I.getTextInfo()    │
+ * │ 核心方案（2026-10 实测跑通）：替换「输入框控制器」的 I.getTextInfo()       │
  * │                                                                          │
  * │   const orig = I.getTextInfo;                                            │
  * │   I.getTextInfo = () => ({ plainText: TEXT, rtfElements: [] });          │
@@ -37,9 +37,14 @@
  */
 
 (() => {
-  const NS = (window.__livraNS = window.__livraNS || {});
-  if (NS.installed) return;
+  const NS = window.Livra;
+  if (NS.installed.sender) return;
+  NS.installed.sender = true;
 
+  /**
+   * 发送过程日志。发不出去时这是唯一的线索，所以留着 —— 通过 probe().log 读，
+   * 不单独开一个导出。
+   */
   const sendLog = [];
   function log(entry) {
     sendLog.push(entry);
@@ -52,8 +57,8 @@
 
   /**
    * 输入框控制器 I。源码特征识别（不靠 className，抗改名）。
-   * 恰好具备这 6 个成员：insertEmoji / getTextInfo / isEmpty / editor /
-   * getPasteEditMethod / resetPasteEditMethod。这里只验 4 个判别度最高的。
+   * 恰好具备这几个成员：insertEmoji / getTextInfo / isEmpty / editor /
+   * getPasteEditMethod / resetPasteEditMethod。这里只验判别度最高的四个。
    */
   function isI(o) {
     if (!o || typeof o !== "object") return false;
@@ -75,7 +80,6 @@
   const VENDOR_FILE =
     /chrome-extension:|secsdk|security|sdk-glue|bdms\.js|slardar|tea-|monitor|runtime\.js/i;
 
-  // 运行时定位到的两个核心对象
   let gOnSend = null; // 发送函数（来自调用栈或 fiber）
   let gI = null;      // 输入框控制器 I
   let lastSentContent = "";
@@ -84,8 +88,8 @@
   /* ====================== 调用栈捞候选（DOM-free） ====================== */
 
   /**
-   * 用 Error.prepareStackTrace 拿 CallSite：getFunction() / getArguments() /
-   * getThis()。⚠ CallSite 只在回调里有效，必须同步取完。
+   * 用 Error.prepareStackTrace 拿 CallSite：getFunction() / getArguments() / getThis()。
+   * ⚠ CallSite 只在回调里有效，必须同步取完。
    * ⚠ 默认 stackTraceLimit=10，安全 SDK 自己占十几帧，不调到 120 看不到外面业务函数。
    */
   function captureStackCandidates() {
@@ -122,7 +126,15 @@
         }
 
         const name = site.getFunctionName() || fn.name || "(匿名)";
-        found.push({ label: `stack:${name}`, name, fn, args, thisArg, file, line: site.getLineNumber() });
+        found.push({
+          label: `stack:${name}`,
+          name,
+          fn,
+          args,
+          thisArg,
+          file,
+          line: site.getLineNumber(),
+        });
       }
       return sites;
     };
@@ -232,10 +244,9 @@
   async function discoverController() {
     if (gOnSend && gI) return true;
 
-    // 1) 优先被动：栈里可能已经学到 onSend（页面发过弹幕）
     learnOnSendFromStack();
 
-    // 2) 还没有就只读扫一次 fiber 拿 onSend（唯一会碰 DOM 的地方，且只读不写）
+    // 唯一会碰 DOM 的地方，且只读不写
     if (!gOnSend) {
       const editor = findChatEditor();
       if (editor) {
@@ -247,7 +258,6 @@
       }
     }
 
-    // 3) 拿到 onSend 后用 apply 探针把 I 钓出来
     if (gOnSend && !gI) {
       gI = await fishI(gOnSend);
       if (gI) {
@@ -286,7 +296,6 @@
   NS.bus.on("outbound", (payload) => {
     if (payload.content) lastSentContent = payload.content;
 
-    // 被动发现 onSend/e（DOM-free）
     try {
       learnOnSendFromStack();
     } catch (error) {
@@ -303,23 +312,17 @@
 
   /* ====================== 真正的发弹幕（DOM-free） ====================== */
 
-  /**
-   * 发弹幕：**只替换 I.getTextInfo 这一次调用的返回值**，让页面读到的文本是我们指定的。
-   * 文本框可以一个字都没有，但页面照常走完整业务链路 + 签名。
-   * 文本在 onSend 第一行被「同步」读走，所以调用一返回就能立刻还原，副作用窗口极小。
-   */
   async function sendDanmaku(text) {
     const content = String(text || "").trim();
     if (!content) return { ok: false, error: "弹幕内容为空" };
 
-    // 确保已定位到发送控制器
     if (!gOnSend || !gI) {
       const ok = await discoverController();
       if (!ok) {
         return {
           ok: false,
           error:
-            "还没定位到发送控制器（onSend / 输入框控制器 I）。请先在直播间手动发一条弹幕以触发自动捕获，或稍等页面自动发现完成。",
+            "还没定位到发送控制器。请先在直播间手动发一条弹幕以触发自动捕获，或稍等页面自动发现完成。",
         };
       }
     }
@@ -354,8 +357,7 @@
     const sent = await seen;
 
     if (!sent) {
-      // 常见原因：发送防重入锁卡住（上一次发送没走完，多见于测试时把请求吞了），
-      // 或直播间风控。解法都是 reload 页面。
+      // 常见原因：发送防重入锁卡住（上一次发送没走完），或直播间风控。解法都是 reload。
       log({ phase: "发送未产生请求", callError, at: Date.now() });
       return {
         ok: false,
@@ -366,6 +368,8 @@
     }
 
     log({ phase: "发送成功", content, at: Date.now() });
+    NS.bus.emit("sent", { content });
+
     return {
       ok: true,
       note: "通过替换 I.getTextInfo 注入文本，全程未触碰输入框 DOM",
@@ -373,27 +377,23 @@
     };
   }
 
-  /* ====================== 对外接口（保持 main.js 兼容） ====================== */
-
   NS.sender = {
     sendDanmaku,
-    discover: discoverController,
-    sendLog: () => sendLog.slice(-20),
-    log,
 
-    /** 调试用：看定位状态 */
-    sendFn: () => ({
+    /** 调试用：定位状态 + 最近几次发送的过程日志 */
+    probe: () => ({
       onSendFound: Boolean(gOnSend),
-      onSendName: gOnSend ? (gOnSend.name || "(匿名)") : null,
+      onSendName: gOnSend ? gOnSend.name || "(匿名)" : null,
       IFound: Boolean(gI),
       IMethods: gI ? Object.getOwnPropertyNames(gI).slice(0, 12) : null,
       isI: gI ? isI(gI) : false,
       lastSentContent,
       editorFound: Boolean(findChatEditor()),
+      log: sendLog.slice(-20),
     }),
   };
 
-  // 直播间 UI 异步渲染，输入框可能很晚才出现；兜底：8s 后若还没发现，只读扫一次 fiber 并钓 I。
+  // 直播间 UI 异步渲染，输入框可能很晚才出现；兜底：8s 后若还没发现，只读扫一次 fiber
   setTimeout(() => {
     if (gOnSend && gI) return;
     discoverController().catch(() => {});

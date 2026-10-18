@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>智能直播助手</title>
+  <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+  <div class="app">
+    <header class="head">
+      <div class="brand">
+        <span class="logo">DY</span>
+        <div class="brand-text">
+          <h1>智能直播助手</h1>
+        </div>
+      </div>
+      <span id="badge" class="badge">未连接</span>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" type="button" role="tab" data-tab="stream" aria-selected="true">
+        消息流<span id="streamCount" class="tab-count">0</span>
+      </button>
+      <button class="tab" type="button" role="tab" data-tab="types" aria-selected="false">
+        数据类型<span id="typeCount" class="tab-count">0</span>
+      </button>
+    </nav>
+
+    <main class="body">
+      <section id="pane-stream" class="pane" role="tabpanel">
+        <div id="messageEmpty" class="empty">还没收到数据。确认已经进入直播间。</div>
+        <!--
+          虚拟滚动：#messageList 撑出完整滚动高度，里面只放视口那几十行，
+          每行用 translateY 摆到自己的位置。消息本体一直在内存里。
+        -->
+        <div id="messageList" class="message-list">
+          <div id="messageRows" class="rows"></div>
+        </div>
+      </section>
+
+      <section id="pane-types" class="pane" role="tabpanel" hidden>
+        <div class="types-bar">
+          <span class="types-hint">勾选的项目会出现在消息流里</span>
+          <button id="selectAll" class="mini" type="button">全选</button>
+        </div>
+        <div id="typeList" class="type-list"></div>
+      </section>
+    </main>
+
+    <section class="send">
+      <div class="send-row">
+        <input id="danmakuInput" type="text" placeholder="发一条弹幕…" autocomplete="off" maxlength="60">
+        <button id="danmakuSend" class="primary" type="button">发送</button>
+      </div>
+      <div id="sendStatus" class="send-status"></div>
+    </section>
+  </div>
+
+  <!-- 命名空间：和网页里 SDK 用的是同一个全局对象 window.Livra，这里只装得进一部分模块 -->
+  <script src="../sdk/namespace.js"></script>
+  <!-- 类型清单：面板能勾哪些数据、页面会给消息打什么类型标记，都是同一份定义 -->
+  <script src="../sdk/types.js"></script>
+  <!-- 解码原语：面板要自己从完整字段里取礼物名、数量等，需要同一套 wire 解码 -->
+  <script src="../sdk/protocol/wire.js"></script>
+  <!-- 消息文案：SDK 只解码不解释，怎么显示由这里决定 -->
+  <script src="format.js"></script>
+  <script src="panel.js"></script>
+</body>
+</html>
