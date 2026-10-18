@@ -1,10 +1,11 @@
 /**
- * Livra 侧边栏 —— 智能直播助手
+ * 主播助手模块 · 侧边栏界面
  *
  * 侧边栏是「窗口级」的：一个窗口一个面板，内容始终跟随该窗口的**当前标签页**。
  * 所以切换标签页时面板要重新取状态（onActivated / onUpdated / onFocusChanged）。
  *
- * 面板只是控制面，真正的会话状态在 background.js 的 sessions（按 tabId 一份）。
+ * 面板只是控制面，真正的会话状态在 background.js 的 sessions（按 tabId 一份），
+ * 直播数据在同级 live-store.js（跑在 service worker 里，按 tabId 一份）。
  */
 
 const els = {

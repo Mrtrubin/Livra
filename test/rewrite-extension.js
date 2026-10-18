@@ -295,7 +295,7 @@ async function main() {
     const probe = win.tabs[0];
     const panel = await chrome.tabs.create({
       windowId: win.id,
-      url: chrome.runtime.getURL("sidepanel.html"),
+      url: chrome.runtime.getURL("modules/assistant/assistant.html"),
       active: false
     });
     await chrome.tabs.update(probe.id, { active: true });
@@ -304,7 +304,7 @@ async function main() {
   await sleep(1800);
 
   const { targetInfos } = await browser.send("Target.getTargets");
-  const panelTarget = targetInfos.find(t => (t.url || "").includes("sidepanel.html"));
+  const panelTarget = targetInfos.find(t => (t.url || "").includes("modules/assistant/assistant.html"));
   const probeTarget = targetInfos.find(t => (t.url || "").includes("tab=panel"));
 
   if (!panelTarget || !probeTarget) throw new Error("侧边栏 / 面板窗口的 target 没找到");

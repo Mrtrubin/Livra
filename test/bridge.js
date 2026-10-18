@@ -37,7 +37,7 @@ const path = require("path");
 const EXT = path.resolve(__dirname, "..");
 const CDP_PORT = Number(process.env.CDP_PORT || 9351);
 const LIVE_URL_HINT = "live.douyin.com";
-const PANEL_URL_HINT = "sidepanel.html";
+const PANEL_URL_HINT = "modules/assistant/assistant.html";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -165,7 +165,7 @@ async function openPanel(cdp) {
 
   await cdp.evalIn(sw.targetId, `chrome.tabs.create({
     windowId: ${windowId},
-    url: chrome.runtime.getURL("sidepanel.html"),
+    url: chrome.runtime.getURL("modules/assistant/assistant.html"),
     active: false
   }).then(t => t.id)`);
 
@@ -397,7 +397,7 @@ const commands = {
       wsPatched: String(window.WebSocket).includes("LivraWebSocket"),
       // 这个标记随 main world 脚本演进而变，用来确认页面里跑的是不是最新代码
       hasSendFnApi: typeof window.__livraLive.sendFn === "function",
-      hasEditorFallback: String(window.__livraLive.sendDanmaku).includes("sendViaEditor"),
+      hasEditorFallback: String(window.__livraNS.sender.sendDanmaku).includes("sendViaEditor"),
       messages: window.__livraLive ? window.__livraLive.stats().messages : null
     })`));
 

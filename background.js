@@ -1,17 +1,27 @@
-// Livra —— 按规则改写响应体
+// Livra —— service worker（组合根）
 //
 // 架构：**每个标签页一份独立会话**（tabId -> session）。A 标签开着不影响 B 标签，
-// 可以同时开多个。规则内容仍然共享同一份（rewrite.js 里硬编码）。
+// 可以同时开多个。规则内容仍然共享同一份。
+//
+// 本文件只做三件事：会话与开关、消息路由、CDP 事件。具体能力都在 modules/ 下：
+//
+//   modules/rewrite/     替换模块：rules.js（规则）+ engine.js（CDP Fetch 改写引擎）
+//   modules/inject/      注入模块：页面内的 hook（MAIN world）+ bridge.js（隔离世界）
+//   modules/assistant/   主播助手：侧边栏界面 + live-store.js（本文件 importScripts 的那份）
 //
 // 开关有两个入口，走的是同一段代码（toggleRewrite）：
-//   1. 侧边栏「智能直播助手」（sidepanel.html）—— 点扩展图标打开，主要入口
-//   2. 页面内的悬浮按钮（content.js）—— 只在注入范围内的页面上出现
+//   1. 侧边栏「智能直播助手」（modules/assistant/assistant.html）—— 点扩展图标打开，主要入口
+//   2. 页面内的悬浮按钮（modules/inject/bridge.js）—— 只在注入范围内的页面上出现
 //
-// rewrite.js 通过 importScripts() 加载，两者共用同一个全局作用域，
-// 所以这里可以直接调 enableRewriteDomain / disableCacheForRewrite /
-// handleRequestPaused / REWRITE_OPTIONS / rulesSummary。
-// 这条 importScripts 必须是本文件的第一条语句。
-importScripts("rewrite.js");
+// 下面这几个 importScripts 共用同一个全局作用域，所以这里可以直接调
+// enableRewriteDomain / disableCacheForRewrite / handleRequestPaused /
+// REWRITE_OPTIONS / rulesSummary / liveSummary / requestSendDanmaku 等。
+// importScripts 必须是本文件的第一条语句。
+importScripts(
+  "modules/rewrite/rules.js",
+  "modules/rewrite/engine.js",
+  "modules/assistant/live-store.js"
+);
 
 const DEFAULT_TITLE = "Livra · 智能直播助手";
 const BADGE_COLOR = "#2f855a";
@@ -188,7 +198,7 @@ async function startRewrite(tabId) {
   await attachDebugger(target);
 
   try {
-    // 拦截范围由规则决定，见 rewrite.js 的 buildFetchPatterns()
+    // 拦截范围由规则决定，见 modules/rewrite/rules.js 的 buildFetchPatterns()
     await enableRewriteDomain(target);
 
     // Fetch 域拦不到「由 HTTP 缓存直接满足」的响应，默认要同时关缓存，
@@ -245,39 +255,8 @@ function failRewrite(tabId, error) {
 
 /* ============================ 直播数据 ============================ */
 
-// 每个标签页一份，和改写会话一样按 tabId 隔离
-const MAX_DANMAKU = 200;
-const liveByTab = new Map();
-
-function getLive(tabId) {
-  let live = liveByTab.get(tabId);
-
-  if (!live) {
-    live = { socket: null, online: null, danmaku: [], stats: null, outbound: null, lastAt: 0 };
-    liveByTab.set(tabId, live);
-  }
-
-  return live;
-}
-
-function liveSummary(tabId) {
-  const live = getLive(tabId);
-
-  return {
-    socket: live.socket,
-    online: live.online,
-    danmaku: live.danmaku.slice(-80),
-    stats: live.stats,
-    outbound: live.outbound,
-    lastAt: live.lastAt,
-  };
-}
-
-function broadcastLive(tabId) {
-  chrome.runtime
-    .sendMessage({ type: "PANEL_LIVE_DATA", tabId, live: liveSummary(tabId) })
-    .catch(() => {});
-}
+// 按标签页的数据仓库在 modules/assistant/live-store.js（importScripts 加载），
+// 这里不重复实现，只管转发。
 
 /* ============================ 侧边栏 ============================ */
 
@@ -334,7 +313,7 @@ async function reinjectContentScripts() {
     try {
       await chrome.scripting.executeScript({
         target: { tabId: tab.id },
-        files: ["content.js"],
+        files: ["modules/inject/bridge.js"],
       });
     } catch {
       // chrome:// 之类注入不了的页面直接跳过
@@ -342,7 +321,7 @@ async function reinjectContentScripts() {
   }
 }
 
-// SW 每次启动都补一次。content.js 内部有幂等保护，重复注入不会叠加副作用。
+// SW 每次启动都补一次。bridge.js 内部有幂等保护，重复注入不会叠加副作用。
 reinjectContentScripts().catch(() => {});
 chrome.runtime.onInstalled.addListener(() => {
   reinjectContentScripts().catch(() => {});
@@ -421,15 +400,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "LIVE_READY": {
         if (senderTabId == null) return { ok: false };
 
-        liveByTab.set(senderTabId, {
-          socket: null,
-          online: null,
-          danmaku: [],
-          stats: null,
-          outbound: null,
-          lastAt: 0,
-        });
-
+        resetLive(senderTabId);
         broadcastLive(senderTabId);
         return { ok: true };
       }
@@ -437,12 +408,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "LIVE_SOCKET": {
         if (senderTabId == null) return { ok: false };
 
-        getLive(senderTabId).socket = {
-          state: message.state,
-          url: message.url,
-          at: Date.now(),
-        };
-
+        setLiveSocket(senderTabId, message.state, message.url);
         broadcastLive(senderTabId);
         return { ok: true };
       }
@@ -450,22 +416,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "LIVE_DATA": {
         if (senderTabId == null) return { ok: false };
 
-        const live = getLive(senderTabId);
-
-        // replace = content script 刚启动时的补发快照，直接覆盖而不是追加，避免重复
-        if (message.replace) live.danmaku = [];
-
-        if (Array.isArray(message.batch)) {
-          live.danmaku.push(...message.batch);
-          while (live.danmaku.length > MAX_DANMAKU) live.danmaku.shift();
-        }
-
-        if (message.stats) {
-          live.stats = message.stats;
-          if (message.stats.online != null) live.online = message.stats.online;
-        }
-
-        live.lastAt = Date.now();
+        // replace = 页面 hook 刚启动时的补发快照，直接覆盖而不是追加，避免重复
+        pushLiveData(senderTabId, message.batch, message.stats, message.replace);
         broadcastLive(senderTabId);
 
         return { ok: true };
@@ -475,38 +427,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       case "LIVE_OUTBOUND": {
         if (senderTabId == null) return { ok: false };
 
-        getLive(senderTabId).outbound = {
+        setLiveOutbound(senderTabId, {
           method: message.method,
           url: message.url,
           body: message.body,
-          at: Date.now(),
-        };
+        });
 
         broadcastLive(senderTabId);
         return { ok: true };
       }
 
-      // 侧边栏 -> 让页面发弹幕
+      // 主播助手 -> 让页面发弹幕（真正执行的是 modules/inject/sender.js）
       case "SEND_DANMAKU": {
         if (!Number.isInteger(message.tabId)) return { error: "无效的标签页" };
         if (!message.text) return { error: "弹幕内容为空" };
 
         try {
-          // ⚠️ 页面的「回车发送」只在直播页自己有焦点时才响应。
-          // 用户点的是侧边栏，焦点在面板上，直播页的 document.hasFocus() 是 false，
-          // 这时候派发 Enter 页面根本不理会（实测：字塞进去了、什么都没发生）。
-          // 所以发送前先把直播页激活，让焦点回到它身上。
-          await chrome.tabs.update(message.tabId, { active: true });
-          await new Promise((r) => setTimeout(r, 150));
-        } catch {
-          // 激活失败也照常发，靠页面那侧的兜底文案提示用户
-        }
-
-        try {
-          await chrome.tabs.sendMessage(message.tabId, {
-            type: "SEND_DANMAKU",
-            text: message.text,
-          });
+          await requestSendDanmaku(message.tabId, message.text);
           return { ok: true };
         } catch (error) {
           return { error: `页面没有响应：${error.message}` };
@@ -593,7 +530,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   if (session?.uiTimer) clearTimeout(session.uiTimer);
 
   sessions.delete(tabId);
-  liveByTab.delete(tabId);
+  dropLive(tabId);
 });
 
 /* ============================ 冷启动兜底 ============================ */

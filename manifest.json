@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Livra",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "DY智能直播助手",
   "permissions": [
     "debugger",
@@ -21,7 +21,7 @@
     "default_title": "Livra · 智能直播助手"
   },
   "side_panel": {
-    "default_path": "sidepanel.html"
+    "default_path": "modules/assistant/assistant.html"
   },
   "content_scripts": [
     {
@@ -31,7 +31,11 @@
         "*://localhost/*"
       ],
       "js": [
-        "injected.js"
+        "modules/inject/runtime.js",
+        "modules/inject/protobuf.js",
+        "modules/inject/transport.js",
+        "modules/inject/sender.js",
+        "modules/inject/main.js"
       ],
       "run_at": "document_start",
       "world": "MAIN",
@@ -44,7 +48,7 @@
         "*://localhost/*"
       ],
       "js": [
-        "content.js"
+        "modules/inject/bridge.js"
       ],
       "run_at": "document_idle",
       "all_frames": false

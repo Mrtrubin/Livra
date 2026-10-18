@@ -1,11 +1,16 @@
 /**
- * Livra —— 页面内悬浮开关
+ * 注入模块 · 桥接（隔离世界 / content script）
  *
- * content script 天然是「每个标签页一份」，所以这个开关本身就按标签独立：
+ * 职责：MAIN world 的 hook 和扩展后台之间的唯一通道。
+ *   1. 页面内的悬浮开关（按钮）
+ *   2. 把 hook 解析好的直播数据攒批转给后台，再转到主播助手侧边栏
+ *   3. 把「发弹幕」请求转给 MAIN world，并把结果回传
+ *
+ * content script 天然是「每个标签页一份」，所以悬浮开关本身就按标签独立：
  * 在 A 标签开启不会影响 B 标签。
  *
- * 点按钮 -> 通知 service worker 对「当前标签页」开/关改写。
- * 界面放在 shadow DOM 里，避免和宿主页面的样式互相污染。
+ * ⚠️ 隔离世界**读不到** MAIN world 挂在 window 上的对象（window.__livraLive 在这里是
+ * undefined，两边只共享 DOM）。所以所有跨世界调用都必须走 window.postMessage。
  */
 (() => {
   const HOST_ID = "livra-floating-button";
@@ -263,7 +268,7 @@
       return;
     }
 
-    // 侧边栏要发弹幕 -> 转发给 MAIN world 的 hook，让它去操作页面的输入框
+    // 主播助手要发弹幕 -> 转发给 MAIN world 的 hook
     if (message?.type === "SEND_DANMAKU") {
       requestDanmakuSend(message.text).then((result) => {
         chrome.runtime.sendMessage({ type: "SEND_DANMAKU_RESULT", result }).catch(() => {});
@@ -281,9 +286,9 @@
 
   /* ============================ 发弹幕 ============================ */
 
-  // ⚠️ 关键：隔离世界**读不到** MAIN world 挂在 window 上的对象
-  // （`window.__livraLive` 在 content script 里是 undefined，两边只共享 DOM）。
-  // 所以发弹幕必须走 postMessage 拜托 injected.js，结果也用 postMessage 回传。
+  // ⚠️ 隔离世界读不到 MAIN world 挂在 window 上的对象（window.__livraLive 在这里是
+  // undefined，两边只共享 DOM）。所以发弹幕必须走 postMessage 拜托 main.js，
+  // 结果也用 postMessage 回传。
   let sendSeq = 0;
   const pendingSends = new Map();
 
@@ -293,12 +298,13 @@
     const done = new Promise((resolve) => {
       pendingSends.set(reqId, resolve);
 
-      // 没人应答就给个明确反馈，不然用户看着像卡死
+      // 没人应答就给个明确反馈，不然用户看着像卡死。
+      // 给得宽松一点：MAIN world 那边可能要挨个试好几个候选发送函数（每个最多等 3 秒）。
       setTimeout(() => {
         if (pendingSends.delete(reqId)) {
           resolve({ ok: false, error: "页面没有响应，刷新直播间再试" });
         }
-      }, 4000);
+      }, 25000);
     });
 
     try {
@@ -312,7 +318,7 @@
 
   /* ============================ 直播数据中转 ============================ */
 
-  // MAIN world 的 injected.js 用 postMessage 把解析好的直播数据发过来，
+  // MAIN world 的 hook 用 postMessage 把解析好的直播数据发过来，
   // 这里攒一小批再转给后台，避免每条弹幕都走一次消息。
   const FLUSH_MS = 400;
 

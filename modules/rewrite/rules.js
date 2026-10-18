@@ -1,11 +1,14 @@
 /**
- * Livra —— 响应体正则改写
+ * 替换模块 · 规则与正文替换
  *
- * 用 CDP 的 Fetch 域在「响应阶段」把请求挂起，正文命中规则就替换后再回填给浏览器。
- * 规则硬编码在下面的 REWRITE_RULES 里，改规则就改这里、重新加载扩展即可。
+ * 职责：规则长什么样、以及「拿到一段响应正文后怎么改」。
+ * 跟 CDP 打交道的部分在同级 engine.js。
  *
- * 这个文件由 background.js 通过 importScripts() 加载，共用同一个全局作用域，
- * 所以可以直接用 background.js 里的 sendCommand()。
+ * 由 background.js 用 importScripts() 加载，和它共用同一个全局作用域，
+ * 所以这里可以直接用 background.js 里的 sendCommand()，反过来 background.js
+ * 也能直接用这里的 escapeRegExp() / rulesSummary()。
+ *
+ * 改规则 = 改这个文件 + 在扩展页点「重新加载」。
  */
 
 /* ============================ 规则 ============================ */
@@ -102,6 +105,10 @@ function ruleMatchesUrl(rule, url) {
   return !rule.urlPattern || rule.urlPattern.test(url);
 }
 
+function hasApplicableRule(url) {
+  return REWRITE_RULES.some(rule => rule.enabled && ruleMatchesUrl(rule, url));
+}
+
 // 只处理文本类响应；图片/字体/压缩包等一律放行
 function isTextualResponse(contentType) {
   return /json|javascript|ecmascript|xml|text\/|charset=/i.test(contentType || "");
@@ -133,6 +140,8 @@ function base64ToText(base64) {
 
   return new TextDecoder("utf-8").decode(bytes);
 }
+
+/* ============================ 正文替换 ============================ */
 
 /**
  * 对正文套用所有规则。
@@ -177,8 +186,6 @@ function buildRewrittenHeaders(headers, body) {
   return out;
 }
 
-/* ============================ Fetch 域 ============================ */
-
 /**
  * 把规则里的 fetchPattern 收成 CDP 的 patterns。
  * 只有被拦下来的请求才可能被改写，所以这里决定的是「拦截范围」。
@@ -198,100 +205,4 @@ function buildFetchPatterns() {
   }
 
   return patterns;
-}
-
-function enableRewriteDomain(session) {
-  const patterns = buildFetchPatterns();
-  if (!patterns.length) return Promise.resolve();
-
-  return sendCommand(session, "Fetch.enable", {
-    patterns,
-    handleAuthRequests: false
-  });
-}
-
-/**
- * 关键：Fetch 域**不会拦截由 HTTP 缓存直接满足的响应**。
- * 命中缓存时 `Fetch.requestPaused` 根本不会触发，改写自然无从谈起。
- *
- * 像 cn.vuejs.org 这种带 `cache-control: max-age=31536000, immutable` 的站点，
- * 第二次访问所有 chunk 都从磁盘缓存出，表现就是「规则明明匹配、却一条都没改写」。
- *
- * 所以开改写时必须同时把缓存关掉（DevTools 的 "Disable cache" 复选框做的就是这件事）。
- * 实测：关缓存前只拦到 10 条（config chunk 不在其中），关掉后拦到 28 条并成功改写。
- */
-function disableCacheForRewrite(session) {
-  if (!REWRITE_OPTIONS.disableCache) return Promise.resolve();
-  if (!hasEnabledRewriteRules()) return Promise.resolve();
-  return sendCommand(session, "Network.setCacheDisabled", { cacheDisabled: true });
-}
-
-/**
- * 处理 Fetch.requestPaused。
- *
- * 每一条都必须回应（continueRequest / fulfillRequest / failRequest 三选一），
- * 漏一条那个请求就永远挂起，页面直接卡死。
- *
- * 返回 { rewritten, hits } 供调用方标记请求。
- */
-async function handleRequestPaused(session, params) {
-  const { requestId, request, responseStatusCode, responseHeaders } = params;
-
-  const reply = (method, extra) =>
-    sendCommand(session, method, { requestId, ...extra }).catch(() => {});
-
-  // 重定向 / 拿不到响应体 -> 放行
-  if (responseStatusCode == null || (responseStatusCode >= 300 && responseStatusCode < 400)) {
-    await reply("Fetch.continueRequest");
-    return { rewritten: false };
-  }
-
-  // 204 / 304 没有响应体，省掉一次 Fetch.getResponseBody 往返
-  if (responseStatusCode === 204 || responseStatusCode === 304) {
-    await reply("Fetch.continueRequest");
-    return { rewritten: false };
-  }
-
-  if (!isTextualResponse(findHeaderValue(responseHeaders, "content-type"))) {
-    await reply("Fetch.continueRequest");
-    return { rewritten: false };
-  }
-
-  const url = request.url;
-  const applicable = REWRITE_RULES.some(rule => rule.enabled && ruleMatchesUrl(rule, url));
-
-  if (!applicable) {
-    await reply("Fetch.continueRequest");
-    return { rewritten: false };
-  }
-
-  try {
-    const result = await sendCommand(session, "Fetch.getResponseBody", { requestId });
-
-    // 注意：纯文本 JS / JSON 也常常返回 base64Encoded = true，
-    // 所以不能拿这个字段判断「是不是二进制」，只能按 content-type 判断。
-    const text = result.base64Encoded ? base64ToText(result.body) : result.body;
-
-    const { text: out, hits } = applyRewriteRules(url, text);
-
-    if (!hits.length) {
-      await reply("Fetch.continueRequest");
-      return { rewritten: false };
-    }
-
-    console.log(`[rewrite] ${url} 命中：${hits.join("、")}`);
-
-    await reply("Fetch.fulfillRequest", {
-      responseCode: responseStatusCode,
-      responsePhrase: "OK",
-      responseHeaders: buildRewrittenHeaders(responseHeaders, out),
-      body: textToBase64(out)
-    });
-
-    return { rewritten: true, hits };
-  } catch (error) {
-    console.warn(`[rewrite] 处理失败，回退放行 ${url}：${error.message}`);
-    await reply("Fetch.continueRequest");
-    return { rewritten: false };
-  }
 }
