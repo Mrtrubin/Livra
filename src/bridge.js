@@ -108,7 +108,7 @@
     <div class="tip"><div class="tip-title">本场已收</div><div id="tipBody"></div></div>
   `;
 
-  document.documentElement.appendChild(host);
+  // ⚠️ 这里不 appendChild —— 浮窗要等真的开始采集了才进 DOM，见 setHudVisible()
 
   const hud = root.querySelector(".hud");
   const onlineEl = root.getElementById("online");
@@ -122,7 +122,33 @@
 
   let summary = { total: 0, counts: {}, metrics: {}, socket: { open: false } };
 
+  /**
+   * 浮窗只在「这个页面确实在采集数据」时才挂到 DOM 上。
+   *
+   * 抖音域名下不只有直播间，还有首页、个人页、视频页……那些页面右下角杵一个
+   * 永远灰着的小圆点没有信息量，还压着页面自己的按钮。所以连上之前一律不显示。
+   *
+   * 连上过之后再断线则继续留着（黄点 state）：那时它表达的是「掉了线」，
+   * 比凭空消失有用 —— 用户能看出是网络/直播的问题，而不是插件没生效。
+   */
+  let hasBeenLive = false;
+
+  function setHudVisible(visible) {
+    if (visible === host.isConnected) return;
+
+    if (visible) {
+      restorePosition();
+      document.documentElement.appendChild(host);
+    } else {
+      host.remove();
+    }
+  }
+
   function renderHud() {
+    const live = Boolean(summary.socket?.open);
+    if (live) hasBeenLive = true;
+    setHudVisible(live || hasBeenLive);
+
     onlineEl.textContent = formatNumber(summary.metrics?.online);
     totalEl.textContent = formatNumber(summary.total);
 
@@ -179,7 +205,7 @@
     }
   }
 
-  restorePosition();
+  // 位置在浮窗首次显示时才恢复（见 setHudVisible），没显示之前不用管
 
   let dragging = false;
   let moved = false;
