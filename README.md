@@ -82,9 +82,9 @@ SDK 的解码层（`sdk/protocol/decoder.js`）把 protobuf 解成**完整的字
 ## 开发调试
 
 ```bash
-node test/open-browser.js            # 开测试浏览器（CDP 9351）并加载扩展
-node test/load-extension.js          # 改完 src/ 后重载扩展（service worker 必须重载才吃新代码）
-node test/bridge.js status           # SDK 采集状态
+node test/open-browser.js            # 开测试浏览器（CDP 9351）、加载扩展、刷新页面让它接管
+node test/bridge.js reload           # 改完 src/ 后：重载扩展 + 刷新直播间（service worker 必须重载才吃新代码）
+node test/bridge.js status           # SDK 采集状态 + 浮窗 + 后台
 node test/bridge.js panel [截图路径]  # 打开侧边栏、打印渲染结果、可选截图
 node test/bridge.js probe            # 发送控制器定位状态
 node test/bridge.js send <文本>       # 发一条弹幕
@@ -92,7 +92,7 @@ node test/bridge.js send <文本>       # 发一条弹幕
 node test/diag-worlds.js             # 两个世界的全局对象、旧键残留
 node test/diag-panel.js [JS]         # 面板报错抓取 + 可选在面板里执行 JS
 node test/diag-flow.js               # 链路 + 跨世界调用往返（注入合成消息）
-node test/diag-vlist.js              # 虚拟滚动：条数/DOM 行数/滚动/渲染耗时/勾选过滤
+node test/diag-vlist.js              # 虚拟滚动：条数/DOM 行数/滚动/滚动稳定性/渲染耗时/勾选过滤
 INJECT=3000 node test/diag-vlist.js  # 灌 3000 条再测
 node test/perf-panel.js 30           # 传输量对照（增量 vs 整包）
 ```
