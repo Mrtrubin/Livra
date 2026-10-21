@@ -136,7 +136,22 @@ async function main() {
   const page = targetInfos.find((t) => t.type === "page" && !t.url.startsWith("devtools://"));
 
   console.log(`service worker: ${sw ? "已启动" : "还没起来（多等几秒再看）"}`);
-  console.log(`当前标签页    : ${page ? page.url.slice(0, 90) : "无"}`);
+
+  // 扩展是在页面打开**之后**才加载的，content script 不会自己补进已经加载完的页面。
+  // 刷一遍让新加载的扩展立刻接管，省得每次开完还要手动 reload。
+  //
+  // 用页面内 location.reload() 而不是 CDP 的 Page.reload：后者在这个 session 上会报
+  // "Page.reload wasn't found"（Page 域没 enable 时不可靠），而 Runtime 域反正要开。
+  if (page) {
+    const { sessionId } = await send("Target.attachToTarget", { targetId: page.targetId, flatten: true });
+    await send("Runtime.enable", {}, sessionId).catch(() => {});
+
+    // 页面一导航这次 evaluate 就不会有回应了，所以不 await，等一会儿就好
+    send("Runtime.evaluate", { expression: "location.reload()" }, sessionId).catch(() => {});
+    await sleep(4000);
+  }
+
+  console.log(`当前标签页    : ${page ? "已刷新（让扩展接管）" : "无"}`);
 
   ws.close();
 

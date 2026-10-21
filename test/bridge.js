@@ -17,6 +17,7 @@
  *   node test/bridge.js panel [截图路径]  打开面板并回读 DOM
  *   node test/bridge.js sample [秒]     连续采样一段时间的数据类型分布
  *   node test/bridge.js probe          发弹幕控制器的定位状态
+ *   node test/bridge.js reload        重载扩展 + 刷新直播间（改完代码必做）
  *   node test/bridge.js main <JS>      在直播间主世界执行
  *   node test/bridge.js sw <JS>        在 service worker 执行
  */
@@ -77,6 +78,11 @@ class Cdp {
   /** 在某个 target 的执行环境里跑 JS */
   async evalIn(targetId, expression) {
     const { sessionId } = await this.send("Target.attachToTarget", { targetId, flatten: true });
+
+    // ⚠️ 不 enable 的话，service worker 那种「还没启动」的 target 上求值会一直不返回
+    // （Runtime 域没开，请求被丢掉），表现出来就是 findServiceWorker 永远找不到。
+    await this.send("Runtime.enable", {}, sessionId).catch(() => {});
+
     const r = await this.send(
       "Runtime.evaluate",
       { expression, awaitPromise: true, returnByValue: true },
@@ -205,7 +211,8 @@ const commands = {
           live.targetId,
           `(() => {
             const host = document.getElementById("livra-hud");
-            if (!host || !host.shadowRoot) return "没注入";
+            // 连上之前浮窗按设计不进 DOM
+            if (!host || !host.shadowRoot) return "未显示（还没连上）";
             const root = host.shadowRoot;
             return JSON.stringify({
               online: root.getElementById("online").textContent,
@@ -267,7 +274,11 @@ const commands = {
         live.targetId,
         `(() => {
           const host = document.getElementById("livra-hud");
-          if (!host || !host.shadowRoot) return "没注入";
+          if (!host || !host.shadowRoot) {
+            // 连上之前浮窗按设计不进 DOM，这是正常状态，不是没注入
+            const connected = window.Livra ? window.Livra.room.isConnected() : null;
+            return connected ? "该显示了却不在 DOM 里（异常）" : "未显示（还没连上）";
+          }
           const root = host.shadowRoot;
           return JSON.stringify({
             text: root.querySelector(".hud").textContent.trim().replace(/\\s+/g, " "),
@@ -462,6 +473,37 @@ const commands = {
     cdp.close();
   },
 
+  /**
+   * 改完代码必做的一步。
+   *
+   * 扩展重载只是换了后台/content script 的代码，已经打开的页面里跑的还是旧 content
+   * script，所以还要把直播间页面刷一遍。面板标签同理（旧的属于失效的扩展上下文），
+   * 刷完再跑 `panel` 命令重开。
+   */
+  async reload() {
+    const cdp = await Cdp.connect();
+
+    const { id: extId } = await cdp.send("Extensions.loadUnpacked", { path: EXT });
+    show("扩展已重载", extId);
+
+    const live = await cdp.findPage(LIVE_URL_HINT);
+    if (!live) {
+      show("直播间页面", "没找到，跳过刷新");
+      cdp.close();
+      return;
+    }
+
+    const { sessionId } = await cdp.send("Target.attachToTarget", {
+      targetId: live.targetId,
+      flatten: true,
+    });
+    await cdp.send("Page.reload", {}, sessionId);
+    await sleep(4000);
+
+    show("直播间页面", "已刷新（面板标签要重开：node test/bridge.js panel）");
+    cdp.close();
+  },
+
   async sw(expr) {
     const cdp = await Cdp.connect();
     const target = await cdp.findServiceWorker();
@@ -481,6 +523,7 @@ Livra 调试桥 —— 通过 CDP 控制测试浏览器里的扩展
   node test/bridge.js click-send <内容>    在侧边栏点真实「发送」按钮
   node test/bridge.js panel [截图路径]      打开面板，回读 DOM
   node test/bridge.js sample [秒]          清空后连续采样数据类型分布
+  node test/bridge.js reload              重载扩展并刷新直播间页面（改完代码必做）
   node test/bridge.js main <JS>           在直播间主世界执行
   node test/bridge.js sw <JS>             在 service worker 执行
 
