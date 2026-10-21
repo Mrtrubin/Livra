@@ -158,8 +158,9 @@ async function main() {
   await sleep(1500);
   console.log("面板计数器:", await evalIn(panel.targetId, "JSON.stringify(self.__perf)"));
   console.log(
+    // allMessages 是 panel.js 顶层的 let，不挂在 window 上，但同一 realm 里能直接按名字读
     "面板本地消息数:",
-    await evalIn(panel.targetId, "((window.__livraPanel?.live?.messages) || []).length")
+    await evalIn(panel.targetId, "(typeof allMessages === 'undefined' ? '(不可访问)' : allMessages.length)")
   );
   console.log("DOM 消息节点 :", await evalIn(panel.targetId, "document.querySelectorAll('#messageList .msg').length"));
 
