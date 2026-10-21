@@ -170,9 +170,55 @@ async function main() {
   await sleep(400);
   show("滚到最底", await ev(panel.targetId, snapshot));
 
+  /* ---------- 滚动稳定性（回归：滚一下就一直滚） ----------
+   *
+   * 手动滚一下之后就不再碰它，隔一会儿采样 scrollTop。
+   * 只要有一帧是浏览器自己在改 scrollTop，这里的数值就会持续漂移 ——
+   * 这正是「滚一下就一直滚」的表现。稳定状态下漂移必须是 0。
+   */
+
+  const driftRaw = await ev(
+    panel.targetId,
+    `(() => {
+      const pane = document.getElementById("pane-stream");
+      pane.scrollTop = Math.round(pane.scrollHeight / 2);
+      pane.dispatchEvent(new Event("scroll"));
+
+      const samples = [Math.round(pane.scrollTop)];
+      return new Promise((resolve) => {
+        let n = 0;
+        const tick = () => {
+          samples.push(Math.round(pane.scrollTop));
+          if (++n >= 6) return resolve(JSON.stringify(samples));
+          setTimeout(tick, 200);
+        };
+        setTimeout(tick, 200);
+      });
+    })()`
+  );
+
+  const samples = JSON.parse(driftRaw);
+  const drift = Math.max(...samples) - Math.min(...samples);
+  console.log(
+    `\n[滚动稳定性]  起点 ${samples[0]}，1.2s 内采样 [${samples.join(", ")}]` +
+      `\n  漂移        ${drift}px ${drift === 0 ? "✅ 稳定" : "❌ 页面在自己滚"}`
+  );
+
   /* ---------- 渲染细节 ---------- */
 
   console.log("\n[渲染细节]");
+
+  // 虚拟列表的前置条件：滚动锚定会把「视口上方高度变化」反向补偿成 scrollTop
+  console.log(
+    "  锚定        ",
+    await ev(
+      panel.targetId,
+      `(() => {
+        const v = getComputedStyle(document.getElementById("pane-stream")).overflowAnchor;
+        return v === "none" ? "已关闭（虚拟列表的前置条件）" : v + " ⚠️ 需为 none";
+      })()`
+    )
+  );
 
   console.log(
     "  单行高度    ",
